@@ -1,0 +1,29 @@
+=====================================
+IMPORTANT: Create .env file in backend folder
+=====================================
+
+1. Create a new file named ".env" (not .env.txt) in the "backend" folder
+2. Copy and paste the following content into it:
+
+-------------------Copy everything below this line-------------------
+
+PORT=5000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=travel_mitr
+
+JWT_SECRET=travel_mitr_super_secret_jwt_key_2024
+JWT_EXPIRE=7d
+
+-------------------Copy everything above this line-------------------
+
+3. Save the file
+
+IMPORTANT NOTES:
+- If you have set a MySQL password, add it after DB_PASSWORD=
+- Example: DB_PASSWORD=myPassword123
+- If you left MySQL password empty, keep it as DB_PASSWORD=
+
+If you see this file, it means you need to create the .env file manually.
+
