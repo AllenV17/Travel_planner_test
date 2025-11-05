@@ -36,6 +36,8 @@ export const tripAPI = {
   getOne: (tripId) => api.get(`/trips/${tripId}`),
   optimize: (sourceId, destId, costWeight = 0.4, timeWeight = 0.3, comfortWeight = 0.3) =>
     api.post('/trips/optimize', { source_id: sourceId, dest_id: destId, cost_weight: costWeight, time_weight: timeWeight, comfort_weight: comfortWeight }),
+  optimizeByText: (sourceText, destText, costWeight = 0.4, timeWeight = 0.3, comfortWeight = 0.3) =>
+    api.post('/trips/optimize', { source_text: sourceText, dest_text: destText, cost_weight: costWeight, time_weight: timeWeight, comfort_weight: comfortWeight }),
   delete: (tripId) => api.delete(`/trips/${tripId}`)
 };
 

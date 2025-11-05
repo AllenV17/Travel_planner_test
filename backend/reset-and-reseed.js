@@ -15,82 +15,122 @@ async function resetAndReseed() {
     await pool.execute('SET FOREIGN_KEY_CHECKS = 1');
     console.log('✅ All tables cleared\n');
     
-    // Step 2: Insert destinations
+    // Step 2: Insert destinations for each city (5 each)
     console.log('2. Inserting destinations...');
-    await pool.execute(`
-      INSERT INTO Destination (name, state, city, pincode) VALUES
-      ('Mumbai Airport', 'Maharashtra', 'Mumbai', '400099'),
-      ('Delhi Airport', 'Delhi', 'New Delhi', '110037'),
-      ('Mumbai Central', 'Maharashtra', 'Mumbai', '400008'),
-      ('Delhi Railway Station', 'Delhi', 'New Delhi', '110006'),
-      ('Bangalore Airport', 'Karnataka', 'Bangalore', '560300'),
-      ('Bangalore City', 'Karnataka', 'Bangalore', '560001'),
-      ('Pune Airport', 'Maharashtra', 'Pune', '411032'),
-      ('Pune Station', 'Maharashtra', 'Pune', '411001')
-    `);
-    console.log('✅ 8 destinations inserted\n');
-    
-    // Step 3: Get destinations
-    const [allDests] = await pool.execute('SELECT dest_id, name FROM Destination');
-    const destMap = {};
-    allDests.forEach(d => { destMap[d.name] = d.dest_id; });
-    
-    // Step 4: Insert transport options
-    console.log('3. Inserting transport options...');
-    const routes = [
-      { source: 'Mumbai Airport', dest: 'Mumbai Central', options: [
-        { mode: 'Cab', base_cost: 500.00, duration: 45, comfort: 8 },
-        { mode: 'Auto', base_cost: 200.00, duration: 60, comfort: 4 },
-        { mode: 'Bus', base_cost: 150.00, duration: 75, comfort: 5 }
-      ]},
-      { source: 'Delhi Airport', dest: 'Delhi Railway Station', options: [
-        { mode: 'Cab', base_cost: 450.00, duration: 40, comfort: 8 },
-        { mode: 'Auto', base_cost: 180.00, duration: 55, comfort: 4 },
-        { mode: 'Bus', base_cost: 130.00, duration: 70, comfort: 5 }
-      ]},
-      { source: 'Bangalore Airport', dest: 'Bangalore City', options: [
-        { mode: 'Cab', base_cost: 600.00, duration: 50, comfort: 8 },
-        { mode: 'Auto', base_cost: 250.00, duration: 65, comfort: 4 },
-        { mode: 'Bus', base_cost: 180.00, duration: 80, comfort: 5 }
-      ]},
-      { source: 'Pune Airport', dest: 'Pune Station', options: [
-        { mode: 'Cab', base_cost: 480.00, duration: 42, comfort: 8 },
-        { mode: 'Auto', base_cost: 190.00, duration: 58, comfort: 4 },
-        { mode: 'Bus', base_cost: 140.00, duration: 72, comfort: 5 }
-      ]},
-      { source: 'Mumbai Central', dest: 'Delhi Airport', options: [
-        { mode: 'Train', base_cost: 1800.00, duration: 960, comfort: 7 },
-        { mode: 'Flight', base_cost: 4500.00, duration: 120, comfort: 9 },
-        { mode: 'Bus', base_cost: 1200.00, duration: 1200, comfort: 5 }
-      ]},
-      { source: 'Mumbai Airport', dest: 'Delhi Railway Station', options: [
-        { mode: 'Flight', base_cost: 4200.00, duration: 150, comfort: 9 },
-        { mode: 'Train', base_cost: 1600.00, duration: 1020, comfort: 7 },
-        { mode: 'Bus', base_cost: 1100.00, duration: 1260, comfort: 5 }
-      ]},
-      { source: 'Bangalore Airport', dest: 'Pune Airport', options: [
-        { mode: 'Flight', base_cost: 3800.00, duration: 90, comfort: 9 },
-        { mode: 'Train', base_cost: 1500.00, duration: 840, comfort: 7 },
-        { mode: 'Bus', base_cost: 900.00, duration: 960, comfort: 5 }
-      ]}
-    ];
-    
-    let routeCount = 0;
-    for (const route of routes) {
-      const sourceId = destMap[route.source];
-      const destId = destMap[route.dest];
-      
-      if (sourceId && destId) {
-        for (const option of route.options) {
-          await pool.execute(
-            'INSERT INTO TransportOption (source_id, dest_id, mode, base_cost, duration, comfort_level) VALUES (?, ?, ?, ?, ?, ?)',
-            [sourceId, destId, option.mode, option.base_cost, option.duration, option.comfort]
-          );
-        }
-        routeCount++;
+    const cityToPlaces = {
+      Mumbai: [
+        { name: 'Mumbai Airport', pincode: '400099' },
+        { name: 'Mumbai Central', pincode: '400008' },
+        { name: 'Bandra Kurla Complex', pincode: '400051' },
+        { name: 'Andheri Station', pincode: '400058' },
+        { name: 'Colaba', pincode: '400005' }
+      ],
+      Bangalore: [
+        { name: 'Bangalore Airport', pincode: '560300' },
+        { name: 'Bangalore City', pincode: '560001' },
+        { name: 'Electronic City', pincode: '560100' },
+        { name: 'Whitefield', pincode: '560066' },
+        { name: 'Indiranagar', pincode: '560038' }
+      ],
+      Pune: [
+        { name: 'Pune Airport', pincode: '411032' },
+        { name: 'Pune Station', pincode: '411001' },
+        { name: 'Hinjawadi', pincode: '411057' },
+        { name: 'Kothrud', pincode: '411038' },
+        { name: 'Kharadi', pincode: '411014' }
+      ],
+      Chennai: [
+        { name: 'Chennai Airport', pincode: '600027' },
+        { name: 'Central Railway Station', pincode: '600003' },
+        { name: 'T Nagar', pincode: '600017' },
+        { name: 'OMR Siruseri', pincode: '603103' },
+        { name: 'Velachery', pincode: '600042' }
+      ],
+      Hyderabad: [
+        { name: 'Hyderabad Airport', pincode: '500409' },
+        { name: 'Secunderabad Station', pincode: '500003' },
+        { name: 'Hitech City', pincode: '500081' },
+        { name: 'Banjara Hills', pincode: '500034' },
+        { name: 'Charminar', pincode: '500002' }
+      ]
+    };
+    const stateMap = {
+      Mumbai: 'Maharashtra',
+      Pune: 'Maharashtra',
+      Bangalore: 'Karnataka',
+      Chennai: 'Tamil Nadu',
+      Hyderabad: 'Telangana'
+    };
+    for (const [city, places] of Object.entries(cityToPlaces)) {
+      for (const place of places) {
+        await pool.execute(
+          'INSERT INTO Destination (name, state, city, pincode) VALUES (?, ?, ?, ?)',
+          [place.name, stateMap[city], city, place.pincode]
+        );
       }
     }
-    console.log(`✅ ${routeCount} routes with ${routes.reduce((sum, r) => sum + r.options.length, 0)} transport options inserted\n`);
+    console.log('✅ 25 destinations inserted (5 per city)\n');
+
+    // Step 3: Get destinations and build per-city lists
+    const [allDests] = await pool.execute('SELECT dest_id, name, city FROM Destination');
+    const cityToDestinations = {};
+    for (const d of allDests) {
+      if (!cityToDestinations[d.city]) cityToDestinations[d.city] = [];
+      cityToDestinations[d.city].push(d);
+    }
+
+    // Step 4: Insert intra-city transport options for every pair (Cab/Auto/Bus)
+    console.log('3. Inserting intra-city transport options (all pairs)...');
+    let routeCount = 0;
+    let optionCount = 0;
+    function cityPricing(city) {
+      // Base heuristics per city; Cab is reference, Auto ~40%, Bus ~30%
+      const map = {
+        Mumbai: { cab: 520, duration: 45 },
+        Pune: { cab: 500, duration: 40 },
+        Bangalore: { cab: 620, duration: 50 },
+        Chennai: { cab: 480, duration: 42 },
+        Hyderabad: { cab: 510, duration: 44 }
+      };
+      return map[city] || { cab: 520, duration: 45 };
+    }
+    for (const [city, list] of Object.entries(cityToDestinations)) {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = 0; j < list.length; j++) {
+          if (i === j) continue;
+          const from = list[i];
+          const to = list[j];
+          const base = cityPricing(city);
+          // Slightly vary by index distance to avoid identical values
+          const factor = 1 + Math.abs(i - j) * 0.05;
+          const cabCost = Math.round(base.cab * factor);
+          const autoCost = Math.round(cabCost * 0.4);
+          const busCost = Math.round(cabCost * 0.3);
+          const duration = Math.round(base.duration * factor);
+          const comfortCab = 8;
+          const comfortAuto = 4;
+          const comfortBus = 5;
+          // Cab
+          await pool.execute(
+            'INSERT INTO TransportOption (source_id, dest_id, mode, base_cost, duration, comfort_level) VALUES (?, ?, ?, ?, ?, ?)',
+            [from.dest_id, to.dest_id, 'Cab', cabCost, duration, comfortCab]
+          );
+          // Auto
+          await pool.execute(
+            'INSERT INTO TransportOption (source_id, dest_id, mode, base_cost, duration, comfort_level) VALUES (?, ?, ?, ?, ?, ?)',
+            [from.dest_id, to.dest_id, 'Auto', autoCost, Math.round(duration * 1.15), comfortAuto]
+          );
+          // Bus
+          await pool.execute(
+            'INSERT INTO TransportOption (source_id, dest_id, mode, base_cost, duration, comfort_level) VALUES (?, ?, ?, ?, ?, ?)',
+            [from.dest_id, to.dest_id, 'Bus', busCost, Math.round(duration * 1.35), comfortBus]
+          );
+          routeCount++;
+          optionCount += 3;
+        }
+      }
+    }
+    console.log(`✅ ${routeCount} intra-city routes with ${optionCount} transport options inserted\n`);
     
     // Step 5: Insert ride fares for Cab routes
     console.log('4. Inserting ride fares...');
@@ -108,15 +148,19 @@ async function resetAndReseed() {
       
       let fares = {};
       if (source.includes('Mumbai') && dest.includes('Mumbai')) {
-        fares = { uber: 550, ola: 520, rapido: 480 };
+        fares = { uber: 520, ola: 500, rapido: 470 };
       } else if (source.includes('Delhi') && dest.includes('Delhi')) {
         fares = { uber: 500, ola: 470, rapido: 440 };
       } else if (source.includes('Bangalore') && dest.includes('Bangalore')) {
-        fares = { uber: 650, ola: 620, rapido: 580 };
+        fares = { uber: 620, ola: 600, rapido: 570 };
       } else if (source.includes('Pune') && dest.includes('Pune')) {
-        fares = { uber: 530, ola: 500, rapido: 460 };
+        fares = { uber: 500, ola: 480, rapido: 450 };
+      } else if (source.includes('Chennai') && dest.includes('Chennai')) {
+        fares = { uber: 480, ola: 460, rapido: 430 };
+      } else if (source.includes('Hyderabad') && dest.includes('Hyderabad')) {
+        fares = { uber: 510, ola: 490, rapido: 460 };
       } else {
-        fares = { uber: 550, ola: 520, rapido: 480 };
+        fares = { uber: 540, ola: 510, rapido: 480 };
       }
       
       await pool.execute(`

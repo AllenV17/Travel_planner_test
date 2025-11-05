@@ -73,12 +73,8 @@ const Dashboard = ({ user, onLogout }) => {
     setError('');
     setOptimizationResult(null);
 
-    if (!sourceId || !destId) {
-      setError('Please select both source and destination');
-      return;
-    }
-
-    if (sourceId === destId) {
+    // If ids are present use DB route; else try free text
+    if (sourceId && destId && sourceId === destId) {
       setError('Source and destination cannot be the same');
       return;
     }
@@ -86,13 +82,28 @@ const Dashboard = ({ user, onLogout }) => {
     setLoading(true);
 
     try {
-      const response = await tripAPI.optimize(
-        sourceId,
-        destId,
-        costWeight / 100,
-        timeWeight / 100,
-        comfortWeight / 100
-      );
+      let response;
+      if (sourceId && destId) {
+        response = await tripAPI.optimize(
+          sourceId,
+          destId,
+          costWeight / 100,
+          timeWeight / 100,
+          comfortWeight / 100
+        );
+      } else if (sourceSearch && destSearch) {
+        response = await tripAPI.optimizeByText(
+          sourceSearch,
+          destSearch,
+          costWeight / 100,
+          timeWeight / 100,
+          comfortWeight / 100
+        );
+      } else {
+        setError('Please enter both source and destination');
+        setLoading(false);
+        return;
+      }
       setOptimizationResult(response.data);
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to optimize route. Please try again.');
@@ -294,6 +305,9 @@ const Dashboard = ({ user, onLogout }) => {
                             {option.rides.map((ride, ridx) => (
                               <div key={ridx} className="ride-item">
                                 {ride.app_name}: ₹{ride.fare} ({ride.estimated_time} min)
+                                {ride.deeplink && (
+                                  <a className="deeplink" href={ride.deeplink} target="_blank" rel="noreferrer"> Book</a>
+                                )}
                               </div>
                             ))}
                           </div>

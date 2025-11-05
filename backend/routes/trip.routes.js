@@ -49,12 +49,126 @@ router.delete('/:tripId', authMiddleware, async (req, res) => {
 // Create a new trip (with optimization)
 router.post('/optimize', authMiddleware, async (req, res) => {
   try {
-    const { source_id, dest_id, cost_weight = 0.4, time_weight = 0.3, comfort_weight = 0.3 } = req.body;
+    const { source_id, dest_id, source_text, dest_text, cost_weight = 0.4, time_weight = 0.3, comfort_weight = 0.3 } = req.body;
     
     // Convert snake_case to camelCase for consistency
     const costWeight = cost_weight;
     const timeWeight = time_weight;
     const comfortWeight = comfort_weight;
+
+    // Freeform text mode: geocode and build synthetic options
+    if ((!source_id || !dest_id) && source_text && dest_text) {
+      const { geocodeWithNominatim } = require('../utils/geocode');
+      const { getRouteSummary } = require('../utils/route');
+
+      const src = await geocodeWithNominatim(source_text);
+      const dst = await geocodeWithNominatim(dest_text);
+      if (!src || !dst) {
+        return res.status(400).json({ message: 'Could not geocode one or both locations' });
+      }
+
+      const route = await getRouteSummary({ lat: src.lat, lng: src.lng }, { lat: dst.lat, lng: dst.lng });
+      if (!route) {
+        return res.status(400).json({ message: 'Could not find a route between locations' });
+      }
+
+      const distanceKm = route.distanceMeters / 1000;
+      const durationMin = Math.round(route.durationSeconds / 60);
+
+      function estimateFare(provider) {
+        // Simple heuristic fare model per provider (base + per-km + per-min)
+        const models = {
+          Uber: { base: 60, perKm: 12, perMin: 1.5, minFare: 100 },
+          Ola: { base: 50, perKm: 11, perMin: 1.4, minFare: 90 },
+          Rapido: { base: 40, perKm: 9, perMin: 1.2, minFare: 70 }
+        };
+        const m = models[provider];
+        const raw = m.base + m.perKm * distanceKm + m.perMin * durationMin;
+        return Math.max(Math.round(raw), m.minFare);
+      }
+
+      function makeDeeplink(provider) {
+        const s = `${src.lat},${src.lng}`;
+        const d = `${dst.lat},${dst.lng}`;
+        if (provider === 'Uber') {
+          return `https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${src.lat}&pickup[longitude]=${src.lng}&dropoff[latitude]=${dst.lat}&dropoff[longitude]=${dst.lng}`;
+        }
+        if (provider === 'Ola') {
+          return `ola://app/launch?lat=${src.lat}&lng=${src.lng}&dlat=${dst.lat}&dlng=${dst.lng}`;
+        }
+        if (provider === 'Rapido') {
+          return `rapido://book?slat=${src.lat}&slng=${src.lng}&dlat=${dst.lat}&dlng=${dst.lng}`;
+        }
+        return '';
+      }
+
+      const rideFares = ['Uber', 'Ola', 'Rapido'].map(name => ({
+        app_name: name,
+        fare: estimateFare(name),
+        estimated_time: durationMin,
+        deeplink: makeDeeplink(name)
+      })).sort((a, b) => a.fare - b.fare);
+
+      const optionsWithFares = [{
+        mode: 'Cab',
+        base_cost: rideFares[0].fare,
+        duration: durationMin,
+        comfort_level: 7,
+        rideFares,
+        cheapestFare: rideFares[0]
+      }];
+
+      const normalizedOptions = optionsWithFares.map(option => ({
+        ...option,
+        actualCost: parseFloat(option.cheapestFare ? option.cheapestFare.fare : option.base_cost) || 0,
+        actualTime: parseInt(option.cheapestFare ? option.cheapestFare.estimated_time : option.duration) || 0,
+        comfort: parseInt(option.comfort_level) || 0
+      }));
+
+      const costs = normalizedOptions.map(o => o.actualCost);
+      const times = normalizedOptions.map(o => o.actualTime);
+      const comforts = normalizedOptions.map(o => o.comfort);
+      const minCost = Math.min(...costs);
+      const maxCost = Math.max(...costs);
+      const minTime = Math.min(...times);
+      const maxTime = Math.max(...times);
+      const minComfort = Math.min(...comforts);
+      const maxComfort = Math.max(...comforts);
+
+      const scoredOptions = normalizedOptions.map(option => {
+        const costScore = maxCost !== minCost ? 100 * (1 - (option.actualCost - minCost) / (maxCost - minCost)) : 100;
+        const timeScore = maxTime !== minTime ? 100 * (1 - (option.actualTime - minTime) / (maxTime - minTime)) : 100;
+        const comfortScore = maxComfort !== minComfort ? 100 * (option.comfort - minComfort) / (maxComfort - minComfort) : 100;
+        const compositeScore = costWeight * costScore + timeWeight * timeScore + comfortWeight * comfortScore;
+        return { ...option, costScore, timeScore, comfortScore, compositeScore };
+      }).sort((a, b) => b.compositeScore - a.compositeScore);
+
+      const bestOption = scoredOptions[0];
+
+      return res.status(200).json({
+        message: 'Optimized route generated successfully (estimated with live geocoding/routing)',
+        tripId: null,
+        recommendation: {
+          mode: bestOption.mode,
+          appName: bestOption.cheapestFare ? bestOption.cheapestFare.app_name : 'Direct',
+          totalCost: bestOption.actualCost,
+          totalDuration: bestOption.actualTime,
+          comfort: bestOption.comfort,
+          score: isNaN(bestOption.compositeScore) ? '0.00' : bestOption.compositeScore.toFixed(2),
+          source: { name: src.name, lat: src.lat, lng: src.lng },
+          destination: { name: dst.name, lat: dst.lat, lng: dst.lng }
+        },
+        allOptions: scoredOptions.map(o => ({
+          mode: o.mode,
+          appName: o.cheapestFare ? o.cheapestFare.app_name : 'Direct',
+          cost: o.actualCost,
+          duration: o.actualTime,
+          comfort: o.comfort,
+          score: isNaN(o.compositeScore) ? '0.00' : o.compositeScore.toFixed(2),
+          rides: o.rideFares
+        }))
+      });
+    }
 
     if (!source_id || !dest_id) {
       return res.status(400).json({ message: 'Source and destination are required' });
